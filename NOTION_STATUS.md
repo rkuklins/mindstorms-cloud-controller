@@ -4,6 +4,218 @@
 
 **WRACK Control Center** is a web-based application for controlling and monitoring LEGO Mindstorms EV3 robots remotely. The app provides real-time device control, sensor monitoring, terrain mapping, and camera integration through Google Cloud Functions.
 
+**🔗 GitHub Repository**: https://github.com/rkuklins/mindstorms-cloud-controller
+
+---
+
+## 🚀 How to Run the Project
+
+### **Prerequisites**
+- **Node.js**: Version 18 or higher
+- **npm**: Comes with Node.js
+- **Git**: For cloning the repository
+- **GCP Account**: For Cloud Functions (optional for development)
+
+### **Quick Start**
+
+#### **1. Clone the Repository**
+```bash
+git clone https://github.com/rkuklins/mindstorms-cloud-controller.git
+cd mindstorms-cloud-controller
+```
+
+#### **2. Install Dependencies**
+```bash
+npm install
+```
+
+#### **3. Environment Setup**
+```bash
+# Copy the example environment file
+cp .env.local.example .env.local
+
+# Edit .env.local with your actual values
+nano .env.local  # or use your preferred editor
+```
+
+Required environment variables:
+```bash
+NEXT_PUBLIC_GCP_FUNCTION_URL=https://europe-central2-wrack-control.cloudfunctions.net/controlRobot
+NEXT_PUBLIC_API_KEY=your-actual-api-key-here
+NEXT_PUBLIC_GCP_PROJECT_ID=wrack-control
+NEXT_PUBLIC_GCP_REGION=europe-central2
+```
+
+#### **4. Start Development Server**
+```bash
+npm run dev
+```
+
+The application will be available at **http://localhost:3000** (or 3001 if 3000 is in use).
+
+### **Development Commands**
+
+```bash
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm run start
+
+# Run linting
+npm run lint
+
+# Type checking
+npm run type-check  # if available
+```
+
+### **Project Structure Overview**
+```
+mindstorms-cloud-controller/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── page.tsx           # Main dashboard
+│   │   └── layout.tsx         # Root layout
+│   ├── components/            # React components
+│   │   ├── EV3StatusPanel.tsx # Device monitoring
+│   │   ├── VehicleControls.tsx# Movement controls
+│   │   ├── TurretControls.tsx # Turret operations
+│   │   ├── MapVisualization.tsx# Terrain mapping
+│   │   ├── CameraView.tsx     # Video streaming
+│   │   └── ConnectionTest.tsx # GCP connectivity
+│   └── lib/
+│       └── robot-api.ts       # GCP API client
+├── public/                    # Static assets
+├── DESIGN.md                  # Technical architecture
+├── NOTION_STATUS.md          # This document
+└── package.json              # Dependencies & scripts
+```
+
+### **GCP Cloud Functions Setup** (For Full Functionality)
+
+#### **Prerequisites**
+- Google Cloud Platform account
+- `gcloud` CLI installed and configured
+- EV3 robot accessible at specified IP address
+
+#### **Deploy Cloud Functions**
+```bash
+# Navigate to GCP functions directory
+cd ../GCPCloudControlled
+
+# Deploy the control function
+gcloud functions deploy controlRobot \
+  --gen2 \
+  --runtime nodejs20 \
+  --trigger-http \
+  --allow-unauthenticated \
+  --source=. \
+  --entry-point=controlRobot \
+  --region=europe-central2 \
+  --set-env-vars API_KEY=your-secret-api-key,ROBOT_HOST=your-robot-ip,ROBOT_PORT=27700
+```
+
+### **Troubleshooting**
+
+#### **Common Issues**
+
+**🔴 "Failed to fetch" Error**
+- Check if GCP Cloud Function is deployed and accessible
+- Verify API key matches between web app and GCP function
+- Ensure CORS is properly configured in the Cloud Function
+
+**🔴 Port 3000 Already in Use**
+```bash
+# Find and kill the process
+lsof -ti:3000 | xargs kill -9
+
+# Or use a different port
+npm run dev -- -p 3001
+```
+
+**🔴 Environment Variables Not Loading**
+- Ensure `.env.local` file exists in project root
+- Restart development server after changing environment variables
+- Check that variables start with `NEXT_PUBLIC_` for client-side access
+
+**🔴 Module Not Found Errors**
+```bash
+# Clear node modules and reinstall
+rm -rf node_modules package-lock.json
+npm install
+```
+
+**🔴 TypeScript Errors**
+```bash
+# Check TypeScript configuration
+npm run type-check
+
+# Clear Next.js cache
+rm -rf .next
+npm run dev
+```
+
+### **Development Tips**
+
+#### **Browser Developer Tools**
+- Open **Developer Tools** (F12)
+- Check **Console** tab for API communication logs
+- Use **Network** tab to monitor GCP function calls
+
+#### **Testing GCP Connection**
+1. Open the application
+2. Click **"Test Connection"** in the GCP Connection Test panel
+3. Check console logs for detailed connection information
+
+#### **Expanding/Collapsing Panels**
+- All left-panel sections are independently collapsible
+- Click section headers to expand/collapse
+- Status indicators remain visible when collapsed
+
+### **Production Deployment**
+
+#### **Build for Production**
+```bash
+npm run build
+npm run start
+```
+
+#### **Deploy Options**
+- **Vercel**: `npm i -g vercel && vercel`
+- **Netlify**: Connect GitHub repo to Netlify
+- **Docker**: Create Dockerfile for containerized deployment
+
+#### **Environment Variables for Production**
+Set these in your deployment platform:
+- `NEXT_PUBLIC_GCP_FUNCTION_URL`
+- `NEXT_PUBLIC_API_KEY`
+- `NEXT_PUBLIC_GCP_PROJECT_ID`
+- `NEXT_PUBLIC_GCP_REGION`
+
+### **Contributing**
+
+#### **Development Workflow**
+```bash
+# Create feature branch
+git checkout -b feature/your-feature-name
+
+# Make changes and commit
+git add .
+git commit -m "feat: your feature description"
+
+# Push and create pull request
+git push origin feature/your-feature-name
+```
+
+#### **Code Standards**
+- **TypeScript**: All components must be typed
+- **ESLint**: Code must pass linting
+- **Formatting**: Use consistent code formatting
+- **Commits**: Follow conventional commit messages
+
 ---
 
 ## 🚀 Current Status: **FUNCTIONAL PROTOTYPE**

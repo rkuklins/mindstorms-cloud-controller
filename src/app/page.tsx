@@ -6,6 +6,7 @@ import MapVisualization from '@/components/MapVisualization';
 import CameraView from '@/components/CameraView';
 import VehicleControls from '@/components/VehicleControls';
 import TurretControls from '@/components/TurretControls';
+import SpeechControls from '@/components/SpeechControls';
 import ConnectionTest from '@/components/ConnectionTest';
 
 export default function Home() {
@@ -22,9 +23,10 @@ export default function Home() {
 
       <main className="flex h-[calc(100vh-80px)]">
         {/* Left Panel - EV3 Device Status */}
-        <div className="w-1/2 bg-gray-800 border-r border-gray-700 p-6 overflow-y-auto">
+        <div className="w-1/2 bg-gray-800 border-r border-gray-700 p-6 overflow-y-auto space-y-4">
           <ConnectionTest />
           <EV3StatusPanel />
+          <SpeechControls />
         </div>
 
         {/* Right Panel - Map and Controls */}

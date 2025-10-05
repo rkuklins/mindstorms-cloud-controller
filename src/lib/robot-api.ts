@@ -44,16 +44,33 @@ class RobotController {
 
       console.log('📡 Response status:', response.status, response.statusText);
 
-      if (response.ok) {
-        this.connectionStatus = 'connected';
-        this.lastError = undefined;
-        console.log('✅ Connection successful');
-      } else {
+      if (!response.ok) {
         this.connectionStatus = 'error';
         const errorText = await response.text();
         console.log('❌ Response error:', errorText);
-        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+
+        // Try to parse error as JSON
+        try {
+          const errorData = JSON.parse(errorText);
+          this.lastError = errorData.error || errorText;
+          return {
+            success: false,
+            error: errorData.error || 'Request failed',
+            message: errorData.error || errorText,
+          };
+        } catch {
+          this.lastError = errorText;
+          return {
+            success: false,
+            error: errorText || 'Request failed',
+            message: errorText,
+          };
+        }
       }
+
+      this.connectionStatus = 'connected';
+      this.lastError = undefined;
+      console.log('✅ Connection successful');
 
       const data: RobotResponse = await response.json();
       console.log('📦 Response data:', data);
@@ -62,7 +79,13 @@ class RobotController {
       this.connectionStatus = 'disconnected';
       this.lastError = error instanceof Error ? error.message : 'Unknown error';
       console.log('💥 Connection error:', this.lastError);
-      throw error;
+
+      // Return error response instead of throwing
+      return {
+        success: false,
+        error: this.lastError,
+        message: this.lastError,
+      };
     }
   }
 
@@ -145,6 +168,17 @@ class RobotController {
   async getHelp(): Promise<RobotResponse> {
     return this.sendCommand({
       command: 'get_help'
+    });
+  }
+
+  // Speech Command
+  async speak(text: string): Promise<RobotResponse> {
+    if (text.length > 500) {
+      throw new Error('Text too long. Maximum 500 characters allowed.');
+    }
+    return this.sendCommand({
+      command: 'speak',
+      params: { text }
     });
   }
 

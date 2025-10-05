@@ -4,77 +4,147 @@ import { useState, useEffect } from 'react';
 import { Battery100Icon, WifiIcon, CpuChipIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
 import { robotController } from '@/lib/robot-api';
 
-interface EV3Port {
+interface EV3Motor {
   id: string;
   name: string;
-  type: 'motor' | 'sensor';
-  device: string | null;
-  status: 'connected' | 'disconnected' | 'error';
-  value?: string | number;
+  deviceName: string;
+  port: string;
+  available: boolean;
+  angle: number;
+  speed: number;
+  stalled: boolean;
+}
+
+interface EV3Sensor {
+  id: string;
+  name: string;
+  type: string;
+  port: string;
+  available: boolean;
+  value: string;
 }
 
 interface EV3Status {
   isConnected: boolean;
   batteryLevel: number;
+  batteryVoltage: number;
   cpuUsage: number;
-  temperature: number;
-  firmwareVersion: string;
+  kernelVersion: string;
   ipAddress: string;
   lastUpdate: Date;
 }
 
 export default function EV3StatusPanel() {
+  const [isMounted, setIsMounted] = useState(false);
   const [ev3Status, setEV3Status] = useState<EV3Status>({
-    isConnected: true,
-    batteryLevel: 75,
-    cpuUsage: 25,
-    temperature: 45,
-    firmwareVersion: 'v1.10H',
-    ipAddress: '192.168.1.100',
-    lastUpdate: new Date('2024-01-01T12:00:00')
+    isConnected: false,
+    batteryLevel: 0,
+    batteryVoltage: 0,
+    cpuUsage: 0,
+    kernelVersion: 'Unknown',
+    ipAddress: 'Unknown',
+    lastUpdate: new Date()
   });
 
   const [statusExpanded, setStatusExpanded] = useState(true);
   const [motorsExpanded, setMotorsExpanded] = useState(true);
   const [sensorsExpanded, setSensorsExpanded] = useState(true);
 
-  const [ports, setPorts] = useState<EV3Port[]>([
-    { id: 'A', name: 'Port A', type: 'motor', device: 'Large Motor', status: 'connected' },
-    { id: 'B', name: 'Port B', type: 'motor', device: 'Large Motor', status: 'connected' },
-    { id: 'C', name: 'Port C', type: 'motor', device: 'Medium Motor', status: 'connected' },
-    { id: 'D', name: 'Port D', type: 'motor', device: null, status: 'disconnected' },
-    { id: '1', name: 'Port 1', type: 'sensor', device: 'Ultrasonic', status: 'connected', value: '12 cm' },
-    { id: '2', name: 'Port 2', type: 'sensor', device: 'Color Sensor', status: 'connected', value: 'Blue' },
-    { id: '3', name: 'Port 3', type: 'sensor', device: 'Gyro Sensor', status: 'connected', value: '45°' },
-    { id: '4', name: 'Port 4', type: 'sensor', device: null, status: 'disconnected' },
-  ]);
+  const [motors, setMotors] = useState<EV3Motor[]>([]);
+  const [sensors, setSensors] = useState<EV3Sensor[]>([]);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     const fetchRobotStatus = async () => {
       try {
         const response = await robotController.getStatus();
         const connectionStatus = robotController.getConnectionStatus();
-        
-        setEV3Status(prev => ({
-          ...prev,
-          isConnected: connectionStatus === 'connected',
-          lastUpdate: new Date(),
-          // Keep simulated values for now, as the actual EV3 may not return detailed status
-          batteryLevel: Math.max(20, Math.min(100, prev.batteryLevel + (Math.random() - 0.5) * 2)),
-          cpuUsage: Math.max(0, Math.min(100, prev.cpuUsage + (Math.random() - 0.5) * 5)),
-          temperature: Math.max(20, Math.min(60, prev.temperature + (Math.random() - 0.5) * 1)),
-        }));
 
-        // Update sensor readings with simulated values
-        setPorts(prev => prev.map(port => ({
-          ...port,
-          status: connectionStatus === 'connected' ? port.status : 'disconnected',
-          value: port.type === 'sensor' && port.device && connectionStatus === 'connected' ? 
-            port.device === 'Ultrasonic' ? `${Math.floor(Math.random() * 50 + 5)} cm` :
-            port.device === 'Color Sensor' ? ['Red', 'Blue', 'Green', 'Yellow'][Math.floor(Math.random() * 4)] :
-            port.device === 'Gyro Sensor' ? `${Math.floor(Math.random() * 360)}°` :
-            port.value : undefined
-        })));
+        console.log('📊 Status response:', response);
+
+        if (response.success && response.result?.device_info) {
+          const deviceInfo = response.result.device_info;
+          const battery = deviceInfo.battery;
+          const ipAddresses = deviceInfo.ip_addresses || [];
+
+          // Update EV3 Status
+          setEV3Status({
+            isConnected: connectionStatus === 'connected',
+            batteryLevel: battery?.percentage || 0,
+            batteryVoltage: battery?.voltage_v || 0,
+            cpuUsage: deviceInfo.cpu_usage_percent || 0,
+            kernelVersion: deviceInfo.kernel || 'Unknown',
+            ipAddress: ipAddresses.length > 0 ? ipAddresses[0] : 'Unknown',
+            lastUpdate: new Date(),
+          });
+
+          // Update Motors from API response
+          const motorsData: EV3Motor[] = [];
+          if (deviceInfo.motors) {
+            Object.entries(deviceInfo.motors).forEach(([key, motor]: [string, any]) => {
+              motorsData.push({
+                id: key,
+                name: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                deviceName: key,
+                port: motor.port || 'Unknown',
+                available: motor.available || false,
+                angle: motor.angle_degrees || 0,
+                speed: motor.speed_deg_per_sec || 0,
+                stalled: motor.stalled || false,
+              });
+            });
+          }
+          setMotors(motorsData);
+
+          // Update Sensors from API response
+          const sensorsData: EV3Sensor[] = [];
+          if (deviceInfo.sensors) {
+            if (deviceInfo.sensors.ultrasonic) {
+              const us = deviceInfo.sensors.ultrasonic;
+              sensorsData.push({
+                id: 'ultrasonic',
+                name: 'Ultrasonic Sensor',
+                type: 'distance',
+                port: us.port || 'Unknown',
+                available: us.available || false,
+                value: us.available ? `${us.distance_cm?.toFixed(1) || 0} cm` : 'N/A',
+              });
+            }
+            if (deviceInfo.sensors.gyro) {
+              const gyro = deviceInfo.sensors.gyro;
+              sensorsData.push({
+                id: 'gyro',
+                name: 'Gyro Sensor',
+                type: 'angle',
+                port: gyro.port || 'Unknown',
+                available: gyro.available || false,
+                value: gyro.available ? `${gyro.angle_degrees || 0}° (${gyro.speed_deg_per_sec || 0}°/s)` : 'N/A',
+              });
+            }
+            if (deviceInfo.sensors.pixy_camera) {
+              const pixy = deviceInfo.sensors.pixy_camera;
+              sensorsData.push({
+                id: 'pixy_camera',
+                name: 'Pixy Camera',
+                type: 'camera',
+                port: pixy.port || 'Unknown',
+                available: pixy.available || false,
+                value: pixy.available ? 'Active' : 'N/A',
+              });
+            }
+          }
+          setSensors(sensorsData);
+        } else {
+          // If no device_info, just update connection status
+          setEV3Status(prev => ({
+            ...prev,
+            isConnected: connectionStatus === 'connected',
+            lastUpdate: new Date(),
+          }));
+        }
 
       } catch (error) {
         console.error('Failed to fetch robot status:', error);
@@ -83,11 +153,7 @@ export default function EV3StatusPanel() {
           isConnected: false,
           lastUpdate: new Date()
         }));
-        
-        setPorts(prev => prev.map(port => ({
-          ...port,
-          status: 'error'
-        })));
+        // Don't clear motors and sensors on error, keep last known state
       }
     };
 
@@ -100,22 +166,12 @@ export default function EV3StatusPanel() {
     return () => clearInterval(interval);
   }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'connected': return 'text-green-400';
-      case 'disconnected': return 'text-gray-400';
-      case 'error': return 'text-red-400';
-      default: return 'text-gray-400';
-    }
+  const getStatusColor = (available: boolean) => {
+    return available ? 'text-green-400' : 'text-gray-400';
   };
 
-  const getStatusBg = (status: string) => {
-    switch (status) {
-      case 'connected': return 'bg-green-500';
-      case 'disconnected': return 'bg-gray-500';
-      case 'error': return 'bg-red-500';
-      default: return 'bg-gray-500';
-    }
+  const getStatusBg = (available: boolean) => {
+    return available ? 'bg-green-500' : 'bg-gray-500';
   };
 
   return (
@@ -150,46 +206,48 @@ export default function EV3StatusPanel() {
                 <div className="flex items-center space-x-2">
                   <Battery100Icon className="w-5 h-5 text-yellow-400" />
                   <span className="text-sm text-gray-300">Battery</span>
-                  <span className="text-sm font-medium text-white">{Math.round(ev3Status.batteryLevel)}%</span>
+                  <span className="text-sm font-medium text-white">{ev3Status.batteryLevel}%</span>
                 </div>
-                
+
+                <div className="flex items-center space-x-2">
+                  <Battery100Icon className="w-5 h-5 text-purple-400" />
+                  <span className="text-sm text-gray-300">Voltage</span>
+                  <span className="text-sm font-medium text-white">{ev3Status.batteryVoltage.toFixed(2)}V</span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
                 <div className="flex items-center space-x-2">
                   <CpuChipIcon className="w-5 h-5 text-blue-400" />
                   <span className="text-sm text-gray-300">CPU</span>
-                  <span className="text-sm font-medium text-white">{Math.round(ev3Status.cpuUsage)}%</span>
+                  <span className="text-sm font-medium text-white">{ev3Status.cpuUsage}%</span>
                 </div>
-              </div>
-              
-              <div className="space-y-3">
+
                 <div className="flex items-center space-x-2">
                   <WifiIcon className="w-5 h-5 text-green-400" />
                   <span className="text-sm text-gray-300">IP</span>
                   <span className="text-sm font-medium text-white">{ev3Status.ipAddress}</span>
                 </div>
-                
-                <div className="flex items-center space-x-2">
-                  <div className="w-5 h-5 flex items-center justify-center">
-                    <span className="text-xs">🌡️</span>
-                  </div>
-                  <span className="text-sm text-gray-300">Temp</span>
-                  <span className="text-sm font-medium text-white">{Math.round(ev3Status.temperature)}°C</span>
-                </div>
               </div>
             </div>
 
             <div className="mt-4 pt-3 border-t border-gray-600">
-              <div className="flex justify-between text-xs text-gray-400">
-                <span>Firmware: {ev3Status.firmwareVersion}</span>
-                <span>Updated: {ev3Status.lastUpdate.toLocaleTimeString()}</span>
+              <div className="flex justify-between items-center text-xs">
+                <div className="text-gray-400">
+                  <span className="font-semibold">Kernel:</span> {ev3Status.kernelVersion}
+                </div>
+                <div className="text-gray-400">
+                  <span className="font-semibold">Updated:</span> {isMounted ? ev3Status.lastUpdate.toLocaleTimeString() : '--:--:--'}
+                </div>
               </div>
             </div>
           </>
         )}
       </div>
 
-      {/* Motor Ports */}
+      {/* Motors */}
       <div className="bg-gray-700 rounded-lg p-4">
-        <button 
+        <button
           onClick={() => setMotorsExpanded(!motorsExpanded)}
           className="flex items-center justify-between w-full text-left hover:text-blue-400 transition-colors mb-4"
         >
@@ -199,18 +257,18 @@ export default function EV3StatusPanel() {
             ) : (
               <ChevronRightIcon className="w-5 h-5 text-white" />
             )}
-            <h3 className="text-lg font-semibold text-white">Motor Ports</h3>
+            <h3 className="text-lg font-semibold text-white">Motors</h3>
             <span className="text-sm text-gray-400">
-              ({ports.filter(port => port.type === 'motor' && port.status === 'connected').length}/4)
+              ({motors.filter(m => m.available).length}/{motors.length})
             </span>
           </div>
-          
+
           <div className="flex space-x-1">
-            {ports.filter(port => port.type === 'motor').map((port) => (
-              <div 
-                key={port.id}
-                className={`w-2 h-2 rounded-full ${getStatusBg(port.status)}`}
-                title={`${port.name}: ${port.status}`}
+            {motors.map((motor) => (
+              <div
+                key={motor.id}
+                className={`w-2 h-2 rounded-full ${getStatusBg(motor.available)}`}
+                title={`${motor.name}: ${motor.available ? 'available' : 'unavailable'}`}
               />
             ))}
           </div>
@@ -218,32 +276,42 @@ export default function EV3StatusPanel() {
 
         {motorsExpanded && (
           <div className="space-y-3">
-            {ports.filter(port => port.type === 'motor').map((port) => (
-              <div key={port.id} className="flex items-center justify-between p-3 bg-gray-600 rounded">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-500 rounded flex items-center justify-center text-white font-bold text-sm">
-                    {port.id}
+            {motors.length === 0 ? (
+              <div className="text-gray-400 text-sm text-center py-4">No motor data available</div>
+            ) : (
+              motors.map((motor) => (
+                <div key={motor.id} className="flex items-center justify-between p-3 bg-gray-600 rounded">
+                  <div className="flex items-center space-x-3 flex-1">
+                    <div className={`w-8 h-8 ${motor.available ? 'bg-blue-500' : 'bg-gray-500'} rounded flex items-center justify-center text-white font-bold text-xs`}>
+                      ⚙️
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-white font-medium">{motor.name}</div>
+                      <div className="text-gray-300 text-sm">{motor.port}</div>
+                      {motor.available && (
+                        <div className="text-blue-300 text-xs font-mono mt-1">
+                          Angle: {motor.angle}° | Speed: {motor.speed}°/s
+                          {motor.stalled && <span className="text-red-400 ml-2">STALLED</span>}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-white font-medium">{port.name}</div>
-                    <div className="text-gray-300 text-sm">{port.device || 'No device'}</div>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-sm ${getStatusColor(motor.available)}`}>
+                      {motor.available ? 'available' : 'unavailable'}
+                    </span>
+                    <div className={`w-2 h-2 rounded-full ${getStatusBg(motor.available)}`} />
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <span className={`text-sm ${getStatusColor(port.status)}`}>
-                    {port.status}
-                  </span>
-                  <div className={`w-2 h-2 rounded-full ${getStatusBg(port.status)}`} />
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
       </div>
 
-      {/* Sensor Ports */}
+      {/* Sensors */}
       <div className="bg-gray-700 rounded-lg p-4">
-        <button 
+        <button
           onClick={() => setSensorsExpanded(!sensorsExpanded)}
           className="flex items-center justify-between w-full text-left hover:text-blue-400 transition-colors mb-4"
         >
@@ -253,18 +321,18 @@ export default function EV3StatusPanel() {
             ) : (
               <ChevronRightIcon className="w-5 h-5 text-white" />
             )}
-            <h3 className="text-lg font-semibold text-white">Sensor Ports</h3>
+            <h3 className="text-lg font-semibold text-white">Sensors</h3>
             <span className="text-sm text-gray-400">
-              ({ports.filter(port => port.type === 'sensor' && port.status === 'connected').length}/4)
+              ({sensors.filter(s => s.available).length}/{sensors.length})
             </span>
           </div>
-          
+
           <div className="flex space-x-1">
-            {ports.filter(port => port.type === 'sensor').map((port) => (
-              <div 
-                key={port.id}
-                className={`w-2 h-2 rounded-full ${getStatusBg(port.status)}`}
-                title={`${port.name}: ${port.status} - ${port.value || 'No data'}`}
+            {sensors.map((sensor) => (
+              <div
+                key={sensor.id}
+                className={`w-2 h-2 rounded-full ${getStatusBg(sensor.available)}`}
+                title={`${sensor.name}: ${sensor.available ? 'available' : 'unavailable'} - ${sensor.value}`}
               />
             ))}
           </div>
@@ -272,28 +340,32 @@ export default function EV3StatusPanel() {
 
         {sensorsExpanded && (
           <div className="space-y-3">
-            {ports.filter(port => port.type === 'sensor').map((port) => (
-              <div key={port.id} className="flex items-center justify-between p-3 bg-gray-600 rounded">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-green-500 rounded flex items-center justify-center text-white font-bold text-sm">
-                    {port.id}
+            {sensors.length === 0 ? (
+              <div className="text-gray-400 text-sm text-center py-4">No sensor data available</div>
+            ) : (
+              sensors.map((sensor) => (
+                <div key={sensor.id} className="flex items-center justify-between p-3 bg-gray-600 rounded">
+                  <div className="flex items-center space-x-3 flex-1">
+                    <div className={`w-8 h-8 ${sensor.available ? 'bg-green-500' : 'bg-gray-500'} rounded flex items-center justify-center text-white font-bold text-xs`}>
+                      {sensor.type === 'distance' ? '📏' : sensor.type === 'angle' ? '🧭' : '📷'}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-white font-medium">{sensor.name}</div>
+                      <div className="text-gray-300 text-sm">{sensor.port}</div>
+                      {sensor.available && (
+                        <div className="text-blue-300 text-xs font-mono mt-1">{sensor.value}</div>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-white font-medium">{port.name}</div>
-                    <div className="text-gray-300 text-sm">{port.device || 'No device'}</div>
-                    {port.value && (
-                      <div className="text-blue-300 text-xs font-mono">{port.value}</div>
-                    )}
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-sm ${getStatusColor(sensor.available)}`}>
+                      {sensor.available ? 'available' : 'unavailable'}
+                    </span>
+                    <div className={`w-2 h-2 rounded-full ${getStatusBg(sensor.available)}`} />
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <span className={`text-sm ${getStatusColor(port.status)}`}>
-                    {port.status}
-                  </span>
-                  <div className={`w-2 h-2 rounded-full ${getStatusBg(port.status)}`} />
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
       </div>
